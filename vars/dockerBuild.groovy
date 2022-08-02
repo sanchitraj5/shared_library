@@ -1,52 +1,51 @@
-def call(String registryCred = 'a', String registryin = 'a', String docTag = 'a', String contName = 'a', String grepo = 'a', String gbranch = 'a', String gitcred = 'a') {
+def call(String registryCred = 'a', String registryin = 'a', String docTag = 'a', String grepo = 'a', String gbranch = 'a', String gitcred = 'a') {
 
 pipeline {
 environment { 
 		registryCredential = "${registryCred}"
 		registry = "$registryin" 	
-		dockerTag = "${docTag}_$BUILD_NUMBER"
-		containerName = "${contName}"
+		dockerTag = "${docTag}$BUILD_NUMBER"
 		gitRepo = "${grepo}"
 		gitBranch = "${gbranch}"
 		gitCredId = "${gitcred}"
 	}
 		
-	agent {label'docker'}
+	agent none
 	
-	triggers {
-		pollSCM '* * * * *'
-	}
-
 	stages {
 		stage("POLL SCM"){
+      			agent{label 'docker'}
 			steps {
 				 checkout([$class: 'GitSCM', branches: [[name: "$gitBranch"]], extensions: [], userRemoteConfigs: [[credentialsId: "$gitCredId", url: "$gitRepo"]]])
 			}
 		}	
 					
-		stage('BUILD IMAGE') { 
-			 steps { 
-				 script { 
-					 dockerImage = docker.build('"$registry:$dockerTag"') 
-				 }
+		stage('BUILD IMAGE') {
+       			agent{label 'docker'}
+			steps { 
+				script { 
+					dockerimage = docker.build registry + ":$dockerTag" 
+				}
 			} 
 		}
 					
 		stage('PUSH HUB') { 
-			 steps { 
-				 script { 
-					 docker.withRegistry( '', "$registryCredential" ) { 
-						 dockerImage.push() 
-					}
-				}		
+       			agent{label 'docker'}
+			steps { 
+				script {
+					docker.withRegistry( '', registryCredential ) { 
+			                	dockerImage.push() 
+                    			}
+                		}		
 			} 
 		}
 					
 		stage('DEPLOY IMAGE') {
+      			agent{label 'kubernetes'}
 			steps {
 				script { 
-					 docker.withRegistry( '', registryCredential ) { 
-						 dockerImage.run('-it --name "$containerName-$dockerTag"') 
+					docker.withRegistry( '', registryCredential ) { 
+						dockerImage.run('-it --name "$registry-$dockerTag"') 
 					}
 				} 
 			}
@@ -54,5 +53,5 @@ environment {
 	}
 			  
 }
-	
+
 }
